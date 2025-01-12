@@ -268,5 +268,5 @@ plot(bf_in_year$bf_2022, bf_in_year$bf_2023,
                                    "black"))))
 summary(factor(bf_in_year$decreasing))
 summary(factor(bf_in_year$increasing))
-summary(factor(bf_in_year$constant))
+summary(factor(bf_in_year$constant)) 
 ```
