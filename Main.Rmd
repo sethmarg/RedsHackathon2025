@@ -3,16 +3,270 @@ title: "Reds Hackathon 2025"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
 ```{r}
-plot(cars)
+# install dplyr
+
+install.packages("dplyr")
+install.packages("ggplot2")
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+#load in dplyr
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+library(dplyr)
+library(ggplot2)
+library(datasets)
+```
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+# read the csv files
+
+lahman_people <- read.csv("lahman_people.csv")
+savant_data <- read.csv("savant_data_2021_2023.csv")
+```
+
+```{r}
+head(lahman_people)
+head(savant_data)
+```
+
+```{r}
+plate_appearances <- 
+    # start with the savant data
+    savant_data  %>%
+    # we will group by batter, season, game, and at bat and preserve the 
+    group_by(
+        batter,
+        game_year,
+        game_pk,
+        at_bat_number
+    ) %>%
+    summarise() %>%
+    ungroup() %>%
+    # now we have just unique batter, season, game, and at bat observations
+    # but, we need to count how many of those there are each season
+    # so, we will do another group by and summarise
+    group_by(
+        batter,
+        game_year
+    ) %>%
+    summarise(
+        # the n() function counts the number of unique observations we have
+        playing_time = n()
+    ) %>%
+    ungroup()
+plate_appearances
+```
+
+```{r}
+pa_in_year <- plate_appearances %>%
+  group_by(batter) %>%
+  summarise(
+    pa_2021 = sum(playing_time[game_year == 2021], na.rm = TRUE), # Plate appearances for 2021
+    pa_2022 = sum(playing_time[game_year == 2022], na.rm = TRUE), # Plate appearances for 2022
+    pa_2023 = sum(playing_time[game_year == 2023], na.rm = TRUE)  # Plate appearances for 2023
+    ) %>%
+  mutate(
+    pa_avg = round(rowMeans(select(., pa_2021, pa_2022, pa_2023), na.rm = TRUE)) # Calculate row-wise mean
+    )
+pa_in_year
+  
+```
+
+```{r}
+pa_in_year <- pa_in_year %>%
+  mutate(
+    # Is there a steady decrease in plate appearances?
+    # Calculate percentage decrease between 2021 and 2022
+    decrease_21_22 = (pa_2021 - pa_2022) / pa_2021,
+    # Calculate percentage decrease between 2022 and 2023
+    decrease_22_23 = (pa_2022 - pa_2023) / pa_2022,
+    # Check if both decreases are at least 15%
+    decreasing = if_else(
+      decrease_21_22 >= 0.15 & decrease_22_23 >= 0.15,
+      1,
+      0,
+      2 # likely got injured or underperformed (# -> 0)
+    ),
+    
+    # Is there a steady increase in plate appearances?
+    # Calculate percentage increase between 2021 and 2022
+    increase_21_22 = (pa_2022 - pa_2021) / pa_2021,
+    # Calculate percentage increase between 2022 and 2023
+    increase_22_23 = (pa_2023 - pa_2022) / pa_2022,
+    # Check if both increases are at least 15%
+    increasing = if_else(
+      increase_21_22 >= 0.15 & increase_22_23 >= 0.15,
+      1,
+      0,
+      2 # likely a rookie or comeback from injury (0 -> #)
+    ),
+    
+    # Is the amount of plate appearances constant within 15%
+    constant = if_else(
+      # if it is increasing or decreasing, then it is not constant
+      (increasing == 1) | (decreasing == 1), 
+       0,
+       if_else(
+         # If EITHER difference has an increase or decrease from 0%-15%, it is roughly constant
+         (((increase_21_22 < 0.15) & (increase_21_22 > 0)) | 
+            ((decrease_21_22 < 0.15) & (decrease_21_22 > 0))) &
+           (((increase_22_23 < 0.15) & (increase_22_23 > 0)) | 
+              ((decrease_22_23 < 0.15) & (decrease_22_23 > 0))), 
+         # if both differences are less than a 15% change it is roughly constant
+         1,
+         0
+         )
+       )
+    
+  ) %>%
+  # Optionally, remove intermediate columns
+  select(-decrease_21_22, -decrease_22_23, -increase_21_22, -increase_22_23)
+pa_in_year
+```
+
+```{r}
+plot(pa_in_year$pa_2021, pa_in_year$pa_2022,
+     pch = 19,
+     cex = 2,
+     col = if_else(pa_in_year$decreasing == 1 | pa_in_year$decreasing == 2, 
+                   "red", 
+                   if_else(pa_in_year$increasing == 1 | pa_in_year$increasing == 2,
+                           "#3d943c",
+                           if_else(pa_in_year$constant == 1,
+                                   "blue",
+                                   "black"))))
+plot(pa_in_year$pa_2022, pa_in_year$pa_2023,
+     pch = 19,
+     cex = 1.5,
+     col = if_else(pa_in_year$decreasing == 1, 
+                   "red", 
+                   if_else(pa_in_year$increasing == 1,
+                           "#3d943c",
+                           if_else(pa_in_year$constant == 1,
+                                   "blue",
+                                   "black"))))
+summary(factor(pa_in_year$decreasing))
+summary(factor(pa_in_year$increasing))
+summary(factor(pa_in_year$constant))
+```
+
+```{r}
+batters_faced <- 
+    # start with the savant data
+    savant_data  %>%
+    # we will group by batter, season, game, and at bat and preserve the 
+    group_by(
+        pitcher,
+        game_year,
+        game_pk,
+        at_bat_number
+    ) %>%
+    summarise() %>%
+    ungroup() %>%
+    # now we have just unique batter, season, game, and at bat observations
+    # but, we need to count how many of those there are each season
+    # so, we will do another group by and summarise
+    group_by(
+        pitcher,
+        game_year
+    ) %>%
+    summarise(
+        # the n() function counts the number of unique observations we have
+        playing_time = n()
+    ) %>%
+    ungroup()
+batters_faced
+
+plot(factor(batters_faced$game_year), batters_faced$playing_time, cex = 0.5)
+```
+
+```{r}
+bf_in_year <- batters_faced %>%
+  group_by(pitcher) %>%
+  summarise(
+    bf_2021 = sum(playing_time[game_year == 2021], na.rm = TRUE), # batters faced for 2021
+    bf_2022 = sum(playing_time[game_year == 2022], na.rm = TRUE), # batters faced for 2022
+    bf_2023 = sum(playing_time[game_year == 2023], na.rm = TRUE)  # batters faced for 2023
+    ) %>%
+  mutate(
+    bf_avg = round(rowMeans(select(., bf_2021, bf_2022, bf_2023), na.rm = TRUE)) # Calculate row-wise mean
+    )
+bf_in_year
+```
+
+```{r}
+bf_in_year <- bf_in_year %>%
+  mutate(
+    # Calculate percentage decrease between 2021 and 2022
+    decrease_21_22 = (bf_2021 - bf_2022) / bf_2021,
+    # Calculate percentage decrease between 2022 and 2023
+    decrease_22_23 = (bf_2022 - bf_2023) / bf_2022,
+    # Check if both decreases are at least 15%
+    decreasing = if_else(
+      decrease_21_22 >= 0.15 & decrease_22_23 >= 0.15,
+      1,
+      0,
+      2 # likely injured or under-performed (# -> 0)
+    ),
+    
+    # Calculate percentage increase between 2021 and 2022
+    increase_21_22 = (bf_2022 - bf_2021) / bf_2021,
+    # Calculate percentage increase between 2022 and 2023
+    increase_22_23 = (bf_2023 - bf_2022) / bf_2022,
+    # Check if both increases are at least 15%
+    increasing = if_else(
+      increase_21_22 >= 0.15 & increase_22_23 >= 0.15,
+      1,
+      0,
+      2 # likely rookie or comeback player (0 -> #)
+    ),
+    
+    # Is the amount of batters faced constant within 15%
+    constant = if_else(
+      # if it is increasing or decreasing, then it is not constant
+      (increasing == 1) | (decreasing == 1), 
+       0,
+       if_else(
+         # If EITHER difference has an increase or decrease from 0%-15%, it is roughly constant
+         (((increase_21_22 < 0.15) & (increase_21_22 > 0)) | 
+            ((decrease_21_22 < 0.15) & (decrease_21_22 > 0))) &
+           (((increase_22_23 < 0.15) & (increase_22_23 > 0)) | 
+              ((decrease_22_23 < 0.15) & (decrease_22_23 > 0))), 
+         # if both differences are less than a 15% change it is roughly constant
+         1,
+         0
+         )
+       )
+    
+  ) %>%
+  # Optionally, remove intermediate columns
+  select(-decrease_21_22, -decrease_22_23, -increase_21_22, -increase_22_23)
+bf_in_year
+```
+
+```{r}
+plot(bf_in_year$bf_2021, bf_in_year$bf_2022,
+     pch = 19,
+     cex = 2,
+     col = if_else(bf_in_year$decreasing == 1 | bf_in_year$decreasing == 2, 
+                   "red", 
+                   if_else(bf_in_year$increasing == 1 | bf_in_year$increasing == 2,
+                           "#3d943c",
+                           if_else(bf_in_year$constant == 1,
+                                   "blue",
+                                   "black"))))
+plot(bf_in_year$bf_2022, bf_in_year$bf_2023,
+     pch = 19,
+     cex = 2,
+     col = if_else(bf_in_year$decreasing == 1, 
+                   "red", 
+                   if_else(bf_in_year$increasing == 1,
+                           "#3d943c",
+                           if_else(bf_in_year$constant == 1,
+                                   "blue",
+                                   "black"))))
+summary(factor(bf_in_year$decreasing))
+summary(factor(bf_in_year$increasing))
+summary(factor(bf_in_year$constant))
+```
