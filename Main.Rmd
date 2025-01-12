@@ -3,16 +3,26 @@ title: "Reds Hackathon 2025"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+Installing required libraries and reading data:
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r setup}
+library(dplyr)
 
-```{r}
-plot(cars)
+lahman_people_data <- read.csv('data/lahman_people.csv')
+savant_pitch_by_pitch <- read.csv('data/savant_data_2021_2023.csv')
+sample_submission <- read.csv('data/sample_submission.csv')
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+Sample section of the data
+```{r}
+head(savant_pitch_by_pitch)
+```
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+Grouping pitches into full at bat sequences
+```{r}
+grouped_at_bats <-
+  savant_pitch_by_pitch %>%
+  group_by(batter, pitcher, at_bat_number, game_date, pitch_number, balls, strikes, description) %>%
+  summarize()
+head(grouped_at_bats, 100)
+```
